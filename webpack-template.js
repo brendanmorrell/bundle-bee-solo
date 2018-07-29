@@ -29,8 +29,11 @@ module.exports = {
     new HtmlWebpackPlugin({
       title: 'custom template',
       template: '${htmlTemplateEntry}',
-    }),
+    }), 
   ],
+  resolve: {
+    extensions: ['.jsx', '.scss','.sass','.less', '.js', '.css'],
+  },
   };`;
 
   return config;

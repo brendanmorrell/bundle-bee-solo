@@ -4,6 +4,13 @@
 // TODO maybe peek to see if babelrc exists and use that
 // TODO add like all the presets normally so we don't error out
 // ! research for webpack, etc after prompting for root, and run the 'use their own webpack' function after abstracting it out
+// TODO get the recursive dist folder deletion again. otherwise, they could save other shit to our dist folder, which we dont want
+// TODO AND THEN GET EXPENSIFY AND MCMI WORKING
+// TODO use all bable plugins and presets
+// TODO, only the regular build runs when we use env webpack. check on using production and development
+// TODO get the scripts we need to use
+// TODO make sure temp.js is getting deleted, and potentially change the name
+
 const fs = require('fs');
 const path = require('path');
 const prompt = require('prompt');
@@ -21,20 +28,44 @@ const filesToDeleteAfterRunning = [
   path.join(__dirname, '..', 'dist', 'index.html'),
 ];
 
+const deleteTemporaryFilesAndFolders = files => {
+  files.forEach((path, i, arr) => {
+    console.log(path);
+    fs.unlink(path, (err, res) => {
+      if (i === arr.length - 1) {
+        console.log('last file deleted');
+        fs.rmdir(distDirPath, (err, res) => console.log('dist directory deleted'));
+      }
+    });
+  });
+};
 const getFiles = require('./get-files-from-root.js');
 const createWebpackConfig = require('./webpack-template');
 
 // dev testing purposes only
-const scrumEntry = '../../../week-5/reactscrumboard/src/index.js';
-const scrumRoot = '/Users/bren/Codesmith/week-5/reactscrumboard';
+//SOMEHOW I BROKE ALL THE DYNAMIC SETUPS WHEN CHANGING ALL MY VERSIONS AND DELETING CLI
+const scrumEntry = '../../../week-5/reactscrumboard/src/index.js'; // $$ (BUILD:PROD)
+const scrumRoot = '/Users/bren/Codesmith/week-5/reactscrumboard'; //$$  (env webpack)
 
-const indecisionEntry = '../../../../React/1-indecisionApp/src/app.js';
-const indecisionRoot = '/Users/bren/React/1-indecisionApp';
+const indecisionEntry = '../../../../React/1-indecisionApp/src/app.js'; //$$ (env webpack)
+const indecisionRoot = '/Users/bren/React/1-indecisionApp'; // $$ (env webpack)
 
-const expensifyEntry = '../../../../React/2-expensify/src/app.js';
-const expensifyRoot = '/Users/bren/React/2-expensify';
+const expensifyEntry = '../../../../React/2-expensify/src/app.js'; //$$ (env webpack)
+const expensifyRoot = '/Users/bren/React/2-expensify'; // $$ (env webpack)
 
-const entryFile = indecisionEntry;
+const MCMIEntry = '../../../../MCMI/ReactMCMI/src/components/App.jsx'; // $$ (env webpack)
+const MCMIRoot = '/Users/bren/MCMI/ReactMCMI'; // $$ (env webpack)
+
+const FORMIKEntry = '../../../../React/Formik/src/app.js'; // $$ (env webpack)
+const FORMIKRoot = '/Users/bren/React/Formik'; // $$ (env webpack)
+
+const boiler1entry = '../../../../React/React_Boilerplate-v1/src/app.js'; // $$ (npm run env production)
+const boiler1root = '/Users/bren/React/React_Boilerplate-v1'; // $$ (npm run env production)
+
+const boiler2entry = '../../../../React/React_Boilerplate-v2/src/app.js'; // $$  (env webpack)
+const boiler2root = '/Users/bren/React/React_Boilerplate-v2'; // $$  (env webpack)
+
+const entryFile = scrumEntry;
 
 const absolutePath = path.resolve(entryFile);
 const rootDir = path.dirname(absolutePath);
@@ -184,7 +215,7 @@ getFiles(rootDir, (err, res) => {
               const tempFile = 'temp.js';
               const pathFromRootToEntry = './' + path.relative(confirmedRootDir, absolutePath);
               const tempFileContent = `import '${pathFromRootToEntry}'`;
-              const writePathWithName = confirmedRootDir + tempFile;
+              const writePathWithName = path.join(confirmedRootDir, tempFile);
               console.log(writePathWithName);
 
               fs.writeFile(writePathWithName, tempFileContent, (err, res) => {
@@ -254,69 +285,27 @@ getFiles(rootDir, (err, res) => {
                               );
                             }
                           );
-                          // TODO If they choose this, need to alter the config file to the temp.js insteaf of the entry they specified
                         } else if (answer === 'y' || answer === 'yes') {
-                          // Generate an AST from their config, replace their entry with our temp file, and then save that config to our
-                          const ast = babylon.parse(webpackConfig.content, {
-                            sourceType: 'module',
-                          });
-                          // TODO it seems to break if they use require.resolve. maybe need to scrape all of those;
-                          // TODO change the output to dist if writing a new tamplate to our local directory from their config file base
-                          //   /Users/bren/React/1-indecisionApp/
-                          // ! TRAVERSE FILE AND CHANGE ENTRY, THEN WRITE AS TEMP CONFIG LOCALLY, AND THEN RUN (AND CHANGE ALL TO REQUIRE.RESOLVE
-                          traverse(ast, {
-                            enter(path) {
-                              const outputObject = {
-                                path: distDirPath,
-                                filename: 'bundle.js',
-                              };
-                              if (path.node.type === 'Identifier' && path.node.name === 'entry') {
-                                path.parent.value = babel.types.valueToNode(writePathWithName);
-                              }
-                              if (path.node.type === 'Identifier' && path.node.name === 'output') {
-                                path.parent.value = babel.types.valueToNode(outputObject);
-                              }
-                            },
-                          });
-                          const { code: userWebpackWithNewTempJSEntry } = babel.transformFromAst(
-                            ast,
-                            null,
-                            {
-                              presets: ['env'],
-                            }
-                          );
-                          const webpackWithTempJSEntrySavePath = path.join(
-                            __dirname,
-                            '..',
-                            'webpack.config.js'
-                          );
-                          fs.writeFile(
-                            webpackWithTempJSEntrySavePath,
-                            userWebpackWithNewTempJSEntry,
-                            (err, res) => {
-                              if (err) throw new Error(err);
-                              filesToDeleteAfterRunning.push(webpackWithTempJSEntrySavePath);
-                            }
-                          );
                           console.log('running existing webpack.config.js');
                           // if not, run their config
-                          // run the production build
-                          cmd.get(
-                            `webpack --config ${webpackWithTempJSEntrySavePath} --mode production`,
-                            (err, res) => {
+                          try {
+                            const pathBackFromRoot = path.relative(confirmedRootDir, __dirname);
+                            const pathToTheirRoot = path.relative(__dirname, confirmedRootDir);
+                            process.chdir(pathToTheirRoot);
+                            console.log('New directory: ' + process.cwd());
+                            cmd.get(`npm run env webpack`, (err, res) => {
                               if (err) throw new Error(err);
                               console.log(res);
-                              // build the development build
-                              cmd.get(
-                                `webpack --config ${webpackWithTempJSEntrySavePath} --mode development`,
-                                (err, res) => {
-                                  if (err) throw new Error(err);
-                                  console.log(res);
-                                  console.log('production and development builds successful');
-                                }
-                              );
-                            }
-                          );
+                              console.log('production and development builds successful');
+                              process.chdir(pathBackFromRoot);
+                              console.log('directory after write', process.cwd());
+                              setTimeout(() => {
+                                deleteTemporaryFilesAndFolders(filesToDeleteAfterRunning);
+                              }, 10000);
+                            });
+                          } catch (err) {
+                            console.log('chdir: ' + err);
+                          }
                         }
                       }
                     );
@@ -341,7 +330,7 @@ getFiles(rootDir, (err, res) => {
 //       }
 //     });
 //   });
-// }, 20000);
+// }, 60000);
 
 // this will save the dynamicwebpackconfig to their root directory for when we want that
 // if they want a specific output folder for their bundle file or a specific name, we will need to ask for those
@@ -356,3 +345,46 @@ getFiles(rootDir, (err, res) => {
 // fs.writeFile(fileNameWithPathToRoot, dynamicWebpackConfig, (err, res) => {
 //   console.log('file written');
 // });
+
+// Generate an AST from their config, replace their entry with our temp file, and then save that config to our
+// const ast = babylon.parse(webpackConfig.content, {
+//   sourceType: 'module',
+// });
+// // TODO change the output to dist if writing a new tamplate to our local directory from their config file base
+// //   /Users/bren/React/1-indecisionApp/
+// // ! TRAVERSE FILE AND CHANGE ENTRY, THEN WRITE AS TEMP CONFIG LOCALLY, AND THEN RUN (AND CHANGE ALL TO REQUIRE.RESOLVE
+// const outputObject = {
+//   path:
+//     confirmedRootDir +
+//     path.join(path.relative(confirmedRootDir, __dirname), '..', 'dist'),
+//   filename: 'bundle.js',
+// };
+// console.log(outputObject.path);
+
+// traverse(ast, {
+//   //!! this is what we need to rewrite
+//   // path: path.join(__dirname, '../../Codesmith/zweek-7-PROJECT/create-webpack-config/dist'),
+//   enter(path) {
+//     if (path.node.type === 'Identifier' && path.node.name === 'output') {
+//       path.parent.value = babel.types.valueToNode(outputObject);
+//     }
+//   },
+// });
+// const { code: userWebpackWithNewTempJSEntry } = babel.transformFromAst(
+//   ast,
+//   null,
+//   {
+//     presets: ['env'],
+//   }
+// );
+// const webpackWithTempJSEntrySavePath = path.join(
+//   confirmedRootDir,
+//   'webpack.config.js'
+// );
+// fs.writeFile(
+//   webpackWithTempJSEntrySavePath,
+//   userWebpackWithNewTempJSEntry,
+//   (err, res) => {
+//     if (err) throw new Error(err);
+//   }
+// );
